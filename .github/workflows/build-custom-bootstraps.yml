@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - 'scripts/generate-bootstraps.sh'
+      - 'scripts/build-bootstraps.sh'
       - 'scripts/properties.sh'
       - '.github/workflows/build-custom-bootstraps.yml'
   workflow_dispatch:
@@ -22,47 +22,22 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
     steps:
       - name: Git clone
         uses: actions/checkout@v4
 
-      - name: Generate bootstrap for aarch64
-        run: ./scripts/generate-bootstraps.sh --architectures aarch64
-
-      - name: Add proot configuration
+      - name: Build bootstrap for aarch64
         run: |
-          BOOTSTRAP_ZIP="bootstrap-aarch64.zip"
-          TEMP_DIR=$(mktemp -d)
-          unzip -q "$BOOTSTRAP_ZIP" -d "$TEMP_DIR"
-          
-          # Create proot configuration file
-          echo 'if [ -z "$PROOT_ACTIVE" ]; then' > "$TEMP_DIR/etc/bash.bashrc"
-          echo '    export PROOT_ACTIVE=1' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    export ORIGINAL_PREFIX="/data/data/com.termux/files/usr"' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    export NEW_PREFIX="/data/data/com.readboy.termux/files/usr"' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    proot_wrap() {' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '        if command -v proot >/dev/null 2>&1; then' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '            proot -b "${NEW_PREFIX}:${ORIGINAL_PREFIX}" "$@"' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '        else' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '            "$@"' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '        fi' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    }' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    alias apt='"'"'proot_wrap apt'"'"'' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    alias apt-get='"'"'proot_wrap apt-get'"'"'' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo '    alias dpkg='"'"'proot_wrap dpkg'"'"'' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo 'fi' >> "$TEMP_DIR/etc/bash.bashrc"
-          echo 'export PATH="${NEW_PREFIX}/bin:${NEW_PREFIX}/sbin:$PATH"' >> "$TEMP_DIR/etc/bash.bashrc"
-
-          # Repackage bootstrap
-          cd "$TEMP_DIR"
-          zip -qr "../$BOOTSTRAP_ZIP" ./*
-          mv "../$BOOTSTRAP_ZIP" "$GITHUB_WORKSPACE/"
-          rm -rf "$TEMP_DIR"
+          cd /home/builder
+          cp -r $GITHUB_WORKSPACE termux-packages
+          cd termux-packages
+          ./scripts/build-bootstraps.sh --architectures aarch64
 
       - name: Generate checksums
         run: |
+          cd /home/builder/termux-packages
           sha256sum bootstrap-aarch64.zip > bootstraps-checksums.txt
           sha512sum bootstrap-aarch64.zip > bootstraps-checksums-512.txt
 
@@ -71,9 +46,9 @@ jobs:
         with:
           name: bootstrap-aarch64
           path: |
-            bootstrap-aarch64.zip
-            bootstraps-checksums.txt
-            bootstraps-checksums-512.txt
+            /home/builder/termux-packages/bootstrap-aarch64.zip
+            /home/builder/termux-packages/bootstraps-checksums.txt
+            /home/builder/termux-packages/bootstraps-checksums-512.txt
 
   publish:
     permissions:
