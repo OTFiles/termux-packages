@@ -30,6 +30,9 @@ termux_step_make() {
 	# being set (https://github.com/gradle/gradle/issues/1434):
 	sed -i'' -E '/^org\.gradle\.jvmargs=.*/d' gradle.properties
 
+	# Create local.properties to set SDK path for Gradle
+	echo "sdk.dir=$ANDROID_HOME" > local.properties
+
 	export ANDROID_HOME
 	export GRADLE_OPTS="-Dorg.gradle.daemon=false -Xmx1536m -Dorg.gradle.java.home=/usr/lib/jvm/java-1.17.0-openjdk-amd64"
 
