@@ -29,15 +29,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build bootstrap for aarch64
-        run: |
-          cd /home/builder
-          cp -r $GITHUB_WORKSPACE termux-packages
-          cd termux-packages
-          ./scripts/build-bootstraps.sh --architectures aarch64
+        run: ./scripts/build-bootstraps.sh --architectures aarch64
 
       - name: Generate checksums
         run: |
-          cd /home/builder/termux-packages
           sha256sum bootstrap-aarch64.zip > bootstraps-checksums.txt
           sha512sum bootstrap-aarch64.zip > bootstraps-checksums-512.txt
 
@@ -46,9 +41,9 @@ jobs:
         with:
           name: bootstrap-aarch64
           path: |
-            /home/builder/termux-packages/bootstrap-aarch64.zip
-            /home/builder/termux-packages/bootstraps-checksums.txt
-            /home/builder/termux-packages/bootstraps-checksums-512.txt
+            bootstrap-aarch64.zip
+            bootstraps-checksums.txt
+            bootstraps-checksums-512.txt
 
   publish:
     permissions:
