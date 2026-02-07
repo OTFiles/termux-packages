@@ -30,6 +30,15 @@ TERMUX_DEFAULT_ARCHITECTURES=("aarch64" "arm" "i686" "x86_64")
 TERMUX_ARCHITECTURES=("${TERMUX_DEFAULT_ARCHITECTURES[@]}")
 
 TERMUX_PACKAGES_DIRECTORY="/home/builder/termux-packages"
+# 自动检测当前工作目录
+if [ -n "$GITHUB_WORKSPACE" ]; then
+    TERMUX_PACKAGES_DIRECTORY="$GITHUB_WORKSPACE"
+elif [ -d "/home/builder/termux-packages" ]; then
+    TERMUX_PACKAGES_DIRECTORY="/home/builder/termux-packages"
+else
+    TERMUX_PACKAGES_DIRECTORY="$(pwd)"
+fi
+
 TERMUX_BUILT_DEBS_DIRECTORY="$TERMUX_PACKAGES_DIRECTORY/output"
 TERMUX_BUILT_PACKAGES_DIRECTORY="/data/data/.built-packages"
 
