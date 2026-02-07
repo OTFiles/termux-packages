@@ -1,0 +1,108 @@
+name: Build Custom Bootstraps with Proot
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'scripts/build-bootstraps.sh'
+      - 'scripts/properties.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - name: Git clone
+        uses: actions/checkout@v4
+
+      - name: Build bootstrap for aarch64
+        run: |
+          cd /home/builder
+          ln -s $GITHUB_WORKSPACE termux-packages
+          cd termux-packages
+          ./scripts/build-bootstraps.sh --architectures aarch64
+
+      - name: Generate checksums
+        run: |
+          cd /home/builder/termux-packages
+          sha256sum bootstrap-aarch64.zip > bootstraps-checksums.txt
+          sha512sum bootstrap-aarch64.zip > bootstraps-checksums-512.txt
+
+      - name: Store artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-aarch64
+          path: |
+            /home/builder/termux-packages/bootstrap-aarch64.zip
+            /home/builder/termux-packages/bootstraps-checksums.txt
+            /home/builder/termux-packages/bootstraps-checksums-512.txt
+
+  publish:
+    permissions:
+      contents: write
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - name: Git clone
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch bootstrap archives
+        uses: actions/download-artifact@v4
+        with:
+          name: bootstrap-aarch64
+          path: ./artifacts
+
+      - name: Get version info
+        id: version
+        run: |
+          # Extract version from properties.sh
+          source scripts/properties.sh
+          version=$(grep '^TERMUX_APP__PACKAGE_NAME=' scripts/properties.sh | cut -d'=' -f2 | tr -d '"')
+          date=$(date "+%Y.%m.%d")
+          tag="bootstrap-${version}-${date}"
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
+          echo "package=${version}" >> $GITHUB_OUTPUT
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Delete existing release
+        if: steps.check_release.outputs.exists == 'true'
+        run: |
+          gh release delete "${{ steps.version.outputs.tag }}" --yes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create release and upload bootstrap
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "Bootstrap for ${{ steps.version.outputs.package }} (aarch64)" \
+            --notes "Custom bootstrap with proot support for ${{ steps.version.outputs.package }}.\\n\\nPackage: ${{ steps.version.outputs.package }}\\nArchitecture: aarch64\\nBuilt: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" \
+            ./artifacts/bootstrap-aarch64.zip \
+            ./artifacts/bootstraps-checksums.txt \
+            ./artifacts/bootstraps-checksums-512.txt
+        env:
+          GH_TOKEN: ${{ github.token }}

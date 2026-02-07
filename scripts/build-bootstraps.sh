@@ -232,6 +232,129 @@ add_termux_bootstrap_second_stage_files() {
 # Final stage: generate bootstrap archive and place it to current
 # working directory.
 # Information about symlinks is stored in file SYMLINKS.txt.
+
+# Add proot configuration for path mapping
+add_proot_config() {
+
+	local package_arch="$1"
+
+	echo $'\n\n\n'"[*] Adding proot configuration for path mapping..."
+
+	# Create etc/bash.bashrc with proot wrapper functions
+	cat > "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/etc/bash.bashrc" << 'BASHRC'
+# Proot 配置 - 自动路径映射
+# 此配置允许使用原始包名的软件包
+
+if [ -z "$PROOT_ACTIVE" ]; then
+    export PROOT_ACTIVE=1
+    export ORIGINAL_PREFIX="/data/data/com.termux/files/usr"
+    export NEW_PREFIX="/data/data/${TERMUX_APP__PACKAGE_NAME}/files/usr"
+
+    # Proot 包装函数 - 使用 proot 运行命令并绑定路径
+    proot_wrap() {
+        if command -v proot >/dev/null 2>&1; then
+            proot -b "${NEW_PREFIX}:${ORIGINAL_PREFIX}" "$@"
+        else
+            # 如果 proot 不可用，直接运行命令
+            "$@"
+        fi
+    }
+
+    # 常用命令的别名 - 自动使用 proot 包装
+    alias apt='proot_wrap apt'
+    alias apt-get='proot_wrap apt-get'
+    alias dpkg='proot_wrap dpkg'
+    alias apt-cache='proot_wrap apt-cache'
+    alias apt-key='proot_wrap apt-key'
+fi
+
+# 设置 PATH
+export PATH="${NEW_PREFIX}/bin:${NEW_PREFIX}/sbin:${NEW_PREFIX}/usr/bin:${NEW_PREFIX}/usr/sbin:$PATH"
+
+# 设置其他环境变量
+export LD_LIBRARY_PATH="${NEW_PREFIX}/lib:${NEW_PREFIX}/usr/lib:${NEW_PREFIX}/lib64:${NEW_PREFIX}/usr/lib64:$LD_LIBRARY_PATH"
+export PKG_CONFIG_PATH="${NEW_PREFIX}/lib/pkgconfig:${NEW_PREFIX}/usr/lib/pkgconfig:${NEW_PREFIX}/share/pkgconfig:$PKG_CONFIG_PATH"
+BASHRC
+
+	# Create etc/profile
+	cat > "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/etc/profile" << 'PROFILE'
+# /etc/profile - System-wide profile for proot environment
+
+if [ -z "$PROOT_ACTIVE" ]; then
+    export PROOT_ACTIVE=1
+    export ORIGINAL_PREFIX="/data/data/com.termux/files/usr"
+    export NEW_PREFIX="/data/data/${TERMUX_APP__PACKAGE_NAME}/files/usr"
+
+    # 设置 PATH
+    export PATH="${NEW_PREFIX}/bin:${NEW_PREFIX}/sbin:$PATH"
+
+    # 设置库路径
+    export LD_LIBRARY_PATH="${NEW_PREFIX}/lib:${NEW_PREFIX}/usr/lib:$LD_LIBRARY_PATH"
+fi
+PROFILE
+
+	# Create usr/bin/proot-wrapper script
+	cat > "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/usr/bin/proot-wrapper" << 'PROOT_WRAPPER'
+#!/bin/bash
+# Proot wrapper script for path mapping
+
+ORIGINAL_PREFIX="/data/data/com.termux/files/usr"
+NEW_PREFIX="/data/data/${TERMUX_APP__PACKAGE_NAME}/files/usr"
+
+if command -v proot >/dev/null 2>&1; then
+    # 使用 proot 绑定路径
+    exec proot -b "${NEW_PREFIX}:${ORIGINAL_PREFIX}" "$@"
+else
+    # 如果 proot 不可用，直接运行命令
+    exec "$@"
+fi
+PROOT_WRAPPER
+	chmod 755 "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/usr/bin/proot-wrapper"
+
+	# Create etc/apt/apt.conf.d/99proot
+	cat > "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/etc/apt/apt.conf.d/99proot" << 'APTCONF'
+APT {
+    Install-Recommends "false";
+    Install-Suggests "false";
+    Acquire {
+        ForceIPv4 "false";
+        Retries "3";
+    };
+};
+APTCONF
+
+	# Create README.PROOT.md
+	cat > "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/README.PROOT.md" << 'README'
+# Proot 配置说明
+
+此 Bootstrap 包含 proot 配置，用于在修改包名后访问原始 Termux 软件包。
+
+## 路径映射
+
+- 原始前缀: `/data/data/com.termux/files/usr`
+- 新前缀: `/data/data/com.readboy.termux/files/usr`
+
+## 使用方法
+
+1. apt/dpkg 命令会自动使用 proot 包装
+2. 如果需要手动使用 proot，可以使用 `/usr/bin/proot-wrapper` 脚本
+3. proot 会在后台自动绑定路径，无需手动配置
+
+## 注意事项
+
+- 如果 proot 不可用，命令会直接运行，但可能无法访问原始软件包
+- 此配置仅用于兼容性，建议尽可能使用新包名的软件包
+README
+
+	# Create SYMLINKS.txt for shell symlinks
+	cat > "${BOOTSTRAP_ROOTFS}/${TERMUX_PREFIX}/SYMLINKS.txt" << 'SYMLINKS'
+sh←bin/bash
+sh←bin/dash
+vi←bin/nano
+SYMLINKS
+
+}
+
 create_bootstrap_archive() {
 
 	echo $'\n\n\n'"[*] Creating 'bootstrap-${1}.zip'..."
@@ -485,6 +608,8 @@ main() {
 		# Add termux bootstrap second stage files
 		add_termux_bootstrap_second_stage_files "$package_arch"
 
+		# Add proot configuration for path mapping
+		add_proot_config "$TERMUX_ARCH"
 		# Create bootstrap archive.
 		create_bootstrap_archive "$TERMUX_ARCH" || return $?
 
