@@ -27,8 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate bootstrap for aarch64
-        run: |
-          ./scripts/generate-bootstraps.sh --architectures aarch64
+        run: ./scripts/generate-bootstraps.sh --architectures aarch64
 
       - name: Add proot configuration
         run: |
@@ -36,33 +35,30 @@ jobs:
           TEMP_DIR=$(mktemp -d)
           unzip -q "$BOOTSTRAP_ZIP" -d "$TEMP_DIR"
           
-          # Add proot configuration
-          cat > "$TEMP_DIR/etc/bash.bashrc" << 'BASHRC'
-if [ -z "$PROOT_ACTIVE" ]; then
-    export PROOT_ACTIVE=1
-    export ORIGINAL_PREFIX="/data/data/com.termux/files/usr"
-    export NEW_PREFIX="/data/data/${TERMUX_APP__PACKAGE_NAME}/files/usr"
-
-    proot_wrap() {
-        if command -v proot >/dev/null 2>&1; then
-            proot -b "${NEW_PREFIX}:${ORIGINAL_PREFIX}" "$@"
-        else
-            "$@"
-        fi
-    }
-
-    alias apt='proot_wrap apt'
-    alias apt-get='proot_wrap apt-get'
-    alias dpkg='proot_wrap dpkg'
-fi
-export PATH="${NEW_PREFIX}/bin:${NEW_PREFIX}/sbin:$PATH"
-BASHRC
+          # Create proot configuration file
+          echo 'if [ -z "$PROOT_ACTIVE" ]; then' > "$TEMP_DIR/etc/bash.bashrc"
+          echo '    export PROOT_ACTIVE=1' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    export ORIGINAL_PREFIX="/data/data/com.termux/files/usr"' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    export NEW_PREFIX="/data/data/com.readboy.termux/files/usr"' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    proot_wrap() {' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '        if command -v proot >/dev/null 2>&1; then' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '            proot -b "${NEW_PREFIX}:${ORIGINAL_PREFIX}" "$@"' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '        else' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '            "$@"' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '        fi' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    }' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    alias apt='"'"'proot_wrap apt'"'"'' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    alias apt-get='"'"'proot_wrap apt-get'"'"'' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo '    alias dpkg='"'"'proot_wrap dpkg'"'"'' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo 'fi' >> "$TEMP_DIR/etc/bash.bashrc"
+          echo 'export PATH="${NEW_PREFIX}/bin:${NEW_PREFIX}/sbin:$PATH"' >> "$TEMP_DIR/etc/bash.bashrc"
 
           # Repackage bootstrap
           cd "$TEMP_DIR"
           zip -qr "../$BOOTSTRAP_ZIP" ./*
           mv "../$BOOTSTRAP_ZIP" "$GITHUB_WORKSPACE/"
-          
           rm -rf "$TEMP_DIR"
 
       - name: Generate checksums
@@ -129,7 +125,7 @@ BASHRC
         run: |
           gh release create "${{ steps.version.outputs.tag }}" \
             --title "Bootstrap for ${{ steps.version.outputs.package }} (aarch64)" \
-            --notes "Custom bootstrap with proot support for ${{ steps.version.outputs.package }}.\\n\\nPackage: ${{ steps.version.outputs.package }}\\nArchitecture: aarch64\\nBuilt: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" \
+            --notes "Custom bootstrap with proot support for ${{ steps.version.outputs.package }}.\n\nPackage: ${{ steps.version.outputs.package }}\nArchitecture: aarch64\nBuilt: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" \
             ./artifacts/bootstrap-aarch64.zip \
             ./artifacts/bootstraps-checksums.txt \
             ./artifacts/bootstraps-checksums-512.txt
