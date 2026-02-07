@@ -30,7 +30,7 @@ jobs:
       - name: Build bootstrap for aarch64
         run: |
           cd /home/builder
-          ln -s $GITHUB_WORKSPACE termux-packages
+          cp -r $GITHUB_WORKSPACE termux-packages
           cd termux-packages
           ./scripts/build-bootstraps.sh --architectures aarch64
 
