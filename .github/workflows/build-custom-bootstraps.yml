@@ -24,12 +24,22 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/termux/package-builder:latest
+      options: --user root
     steps:
       - name: Git clone
         uses: actions/checkout@v4
 
+      - name: Fix permissions
+        run: |
+          chown -R builder:builder $GITHUB_WORKSPACE
+          chown -R builder:builder /home/builder
+
       - name: Build bootstrap for aarch64
-        run: ./scripts/build-bootstraps.sh --architectures aarch64
+        run: |
+          su - builder -c "cd $GITHUB_WORKSPACE && ./scripts/build-bootstraps.sh --architectures aarch64"
+        env:
+          NDK: /home/builder/lib/android-ndk-r29
+          ANDROID_HOME: /home/builder/lib/android-sdk-34
 
       - name: Generate checksums
         run: |
