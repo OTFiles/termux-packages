@@ -29,15 +29,11 @@ jobs:
       - name: Git clone
         uses: actions/checkout@v4
 
-      - name: Fix permissions
-        run: |
-          chown -R builder:builder $GITHUB_WORKSPACE
-          chown -R builder:builder /home/builder
-
       - name: Build bootstrap for aarch64
         run: |
-          su - builder -c "cd $GITHUB_WORKSPACE && ./scripts/build-bootstraps.sh --architectures aarch64"
+          sudo -u builder -E bash -c "cd $GITHUB_WORKSPACE && ./scripts/build-bootstraps.sh --architectures aarch64"
         env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
           NDK: /home/builder/lib/android-ndk-r29
           ANDROID_HOME: /home/builder/lib/android-sdk-34
 
